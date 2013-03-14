@@ -53,5 +53,25 @@ Factorial example
 >                                    Assign 'B' (App Sub (Var 'B') (Val 1))])]
 
 -----------------------------------------------------------------------
+Compilation
+comp		::	Prog -> Code
+
+compExpr	::	Expr -> Code
+	case of 
+		| Val ->
+		| Var ->
+		| App -> dkljhglk
+
+--NOT Monadic		
+compProg	::	Prog -> Label -> (Code, Label) 
+
+--Monadic, state is label
+compProg'	::	Prog -> ST Code
 
 
+
+
+
+-----------------------------------------------------------------------
+Execution
+exec	::	Code -> Mem
