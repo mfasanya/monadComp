@@ -57,10 +57,11 @@ Compilation
 comp		::	Prog -> Code
 
 compExpr	::	Expr -> Code
-	case of 
-		| Val ->
-		| Var ->
-		| App -> dkljhglk
+compExpr e	=
+	case e of 
+		| Val i 		-> [PUSH i]
+		| Var x 		-> [PUSHV x]
+		| App o e1 e2 	-> [ (compExpr e1),(compExpr e2), DO o ]
 
 --NOT Monadic		
 compProg	::	Prog -> Label -> (Code, Label) 
