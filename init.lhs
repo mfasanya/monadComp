@@ -56,12 +56,12 @@ Factorial example
 Compilation
 comp		::	Prog -> Code
 
-compExpr	::	Expr -> Code
-compExpr e	=
-	case e of 
-		| Val i 		-> [PUSH i]
-		| Var x 		-> [PUSHV x]
-		| App o e1 e2 	-> [ (compExpr e1),(compExpr e2), DO o ]
+> compExpr	::	Expr -> Code
+> compExpr e	=
+>	case e of 
+>		Val i 		-> [PUSH i]
+>		Var x 		-> [PUSHV x]
+>		App op e1 e2 -> [(compExpr e1),(compExpr e2), DO op]
 
 --NOT Monadic		
 compProg	::	Prog -> Label -> (Code, Label) 
