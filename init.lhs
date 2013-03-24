@@ -91,8 +91,8 @@ NOT Monadic
 >       While e pr  ->  compWhile l e pr
 >       Seqn prs    ->  compSeq l prs
 
-> comp		::	Prog -> Code
-> comp pr   =   fst $ compProg pr 0
+ comp		::	Prog -> Code
+ comp pr   =   fst $ compProg pr 0
 
 Monadic, state is label
 
@@ -143,7 +143,12 @@ Monadic, state is label
 Useful for debugging, delete before hand in.
 
 > runComputation            :: ST Code -> (Code,Int)
-> runComputation (ST c)     =  c 0 
+> runComputation (ST c)     =  c 0
+
+> comp      ::  Prog -> Code
+> comp pr   =   fst $ c 0
+>                   where
+>                       (ST c) = compProg' pr
 
 
 
