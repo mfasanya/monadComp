@@ -1,6 +1,6 @@
 G52AFP Coursework 2 - Monadic Compiler
    
-Samuel Leask -psysl1@nottingham.ac.uk
+Samuel Leask psysl1@nottingham.ac.uk
 Jonathan Sherry psyjs3@nottingham.ac.uk
 
 Imports
