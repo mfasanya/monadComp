@@ -74,8 +74,8 @@ Compilation
 
 Optimise out arithmetic operations where both arguments are known at compile-time
 
-> arithOpt      ::      Op -> Int -> Int -> Int
-> arithOpt op x y =
+> arithOpt          ::      Op -> Int -> Int -> Int
+> arithOpt op x y    =
 >   case op of
 >       Add     ->      x + y
 >       Sub     ->      x - y
@@ -185,7 +185,7 @@ not monadic
 > storeVar v n m    =   (v,n):m
 
 > doOp              ::  Op -> Stack -> Stack
-> doOp op (x:y:st)  =
+> doOp op (y:x:st)  =
 >   case op of
 >       Add         ->  (x + y):st
 >       Sub         ->  (x - y):st
@@ -203,21 +203,35 @@ not monadic
 > remDupes  ::  Mem -> Mem
 > remDupes  =   nubBy (\(v, n) (v', n') -> v == v')
 
-> execLoop                  ::  Machine -> Mem
-> execLoop (c, st, mem, pc) =   if (pc >= (length c)) then (remDupes mem)
->                                 else 
->                                   case (c !! pc) of
->                                       PUSH    n   ->  execLoop (c, (n:st), mem, (pc+1))
->                                       PUSHV   v   ->  execLoop (c, ((loadVar v mem):st), mem, (pc+1))
->                                       POP     v   ->  execLoop (c, (tail st), (storeVar v (head st) mem), (pc+1))
->                                       DO      op  ->  execLoop (c, (doOp op st), mem, (pc+1))
->                                       LABEL   l   ->  execLoop (c, st, mem, pc+1)
->                                       JUMP    l   ->  execLoop (c, st, mem, (findLabel l c))
->                                       JUMPZ   l   ->  execLoop (c, st, mem, (if (head st) == 0 then (findLabel l c) else (pc+1)))
+> execLoop      ::  Machine -> Mem
+> execLoop m    =   if (pc >= (length c)) then mem
+>                       else
+>                           execLoop (execStep m)
+>                               where (c,_,mem,pc) = m
 
 
+
+> execStep                      ::  Machine -> Machine
+> execStep m@(c, st, mem, pc)   =    case (c !! pc) of
+>                                       PUSH    n   ->  (c, (n:st), mem, (pc+1))
+>                                       PUSHV   v   ->  (c, ((loadVar v mem):st), mem, (pc+1))
+>                                       POP     v   ->  (c, (tail st), (storeVar v (head st) mem), (pc+1))
+>                                       DO      op  ->  (c, (doOp op st), mem, (pc+1))
+>                                       LABEL   l   ->  (c, st, mem, (pc+1))
+>                                       JUMP    l   ->  (c, st, mem, (findLabel l c))
+>                                       JUMPZ   l   ->  (c, (tail st), mem, (if (head st) == 0 then (findLabel l c) else (pc+1)))
+
+> debugger      ::  Machine -> IO()
+> debugger m    =   do
+>                       putStrLn (show m)
+>                       option <- getChar
+>                       if (option == 'x') then return ()
+>                           else
+>                               do
+>                                   let next = execStep m
+>                                   debugger next
 
 Execution
 
 > exec	    ::	Code -> Mem
-> exec c    =   execLoop (c,[],[],0)
+> exec c    =   reverse $ remDupes $ execLoop (c,[],[],0)
