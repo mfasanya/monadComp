@@ -20,12 +20,12 @@ Imperative language
 >                          deriving Show
 >
 > data Expr             =  Val Int | Var Name | App Op Expr Expr
->                          deriving Show
+>                          deriving (Show, Eq)
 >
 > type Name             =  Char
 >
 > data Op               =  Add | Sub | Mul | Div
->                          deriving Show
+>                          deriving (Show, Eq)
 
 
 Virtual machine
@@ -62,58 +62,54 @@ Factorial example
 -----------------------------------------------------------------------
 Compilation
 
-
 > compExpr      :: Expr -> Code
 > compExpr e =
 >   case e of
 >       Val i                   ->  [PUSH i]
 >       Var x                   ->  [PUSHV x]
->       App op (Val a) (Val b)  ->  [PUSH (arithOpt op a b)]
->       App op a b              ->  (compExpr a) ++ (compExpr b) ++ [DO op]
+>       App op (Val a) (Val b)  ->  [PUSH (exprOpt op a b)]
+>       App op a b              ->  (if (isReductible e) then (compExpr $ reduce e) else (compExpr a) ++ (compExpr b)) ++ [DO op]
+>
 
 
-Optimise out arithmetic operations where both arguments are known at compile-time
+Optimise out arithmetic operations where both arguments are known at compile-time (constant folding)
 
-> arithOpt          ::      Op -> Int -> Int -> Int
-> arithOpt op x y    =
+> exprOpt           ::  Op -> Int -> Int -> Int
+> exprOpt op x y   
+>                   |   x == y  = commonOpt op x
+>                   |   otherwise = arithOpt op x y
+
+> arithOpt          ::  Op -> Int -> Int -> Int
+> arithOpt op x y   =
 >   case op of
 >       Add     ->      x + y
 >       Sub     ->      x - y
 >       Mul     ->      x * y
 >       Div     ->      x `div` y
 
-NOT Monadic		 
+...and optimise for instances where the operands are equal.
 
-> compIf            ::  Label -> Expr -> Prog -> Prog -> (Code, Label)
-> compIf l e t f    =   ((compExpr e) ++ [JUMPZ l] ++ true ++ [JUMP l', LABEL l] ++ false ++ [LABEL l'], l'')
+> commonOpt         ::  Op -> Int -> Int
+> commonOpt op  x   =
+>   case op of
+>       Add         ->  2*x
+>       Sub         ->  0
+>       Mul         ->  x^2
+>       Div         ->  1
+
+Determine whether an expr can be computed entirely at compile-time, exploiting the fact that such an expr-tree has only 'Val's at the leaves
+
+> isReductible              ::  Expr    ->  Bool
+> isReductible (Var _)      =   False
+> isReductible (App _ x y)  =   (isReductible) x && (isReductible y)
+> isReductible (Val x)      =   True
+
+> reduce                ::  Expr -> Expr
+> reduce (Val x)        =   Val x
+> reduce (Var c)        =   error "something went horribly wrong while reducing an expr tree!"
+> reduce (App op x y)   =   Val (arithOpt op (getVal $ (reduce x)) (getVal $ (reduce y)))
 >                           where
->                               (true, l') = compProg t (l+1)
->                               (false, l'') = compProg f (l'+1)
-
-> compWhile         ::  Label -> Expr -> Prog -> (Code, Label)
-> compWhile l e pr  =   ([LABEL l] ++ (compExpr e) ++ [JUMPZ l'] ++ pr' ++ [JUMP l, LABEL l'], (l'+1))
->                           where
->                               (pr', l') = compProg pr (l+1)
-
-> compSeq               ::  Label -> [Prog] -> (Code, Label)
-> compSeq l [pr]        =   compProg pr l
-> compSeq l (pr:prs)    =   (compFirst ++ compRest, l'')
->                               where
->                                   (compFirst, l') = compProg pr l
->                                   (compRest, l'') = compSeq l' prs
-
-> compProg          ::  Prog -> Label -> (Code, Label)
-> compProg pr l     =
->   case pr of
->       Assign n e  ->  ((compExpr e) ++ [POP n], l)
->       If e t f    ->  compIf l e t f
->       While e pr  ->  compWhile l e pr
->       Seqn prs    ->  compSeq l prs
-
- comp		::	Prog -> Code
- comp pr   =   fst $ compProg pr 0
-
-Monadic, state is label
+>                               getVal (Val x) = x
 
 > type State    =   Label
 > data ST a     =   ST (Label -> (a, Label))
@@ -173,7 +169,7 @@ Useful for debugging, delete before hand in.
 
 
 -----------------------------------------------------------------------
-not monadic
+not monadic (but it probably shouldn't be anyway)
 
 > type Counter = Int
 > type Machine = (Code, Stack, Mem, Counter)
