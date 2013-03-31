@@ -156,10 +156,6 @@ Determine whether an expr can be computed entirely at compile-time, exploiting t
 >
 >       Seqn prs        -> compSeqn' prs
         
-Useful for debugging, delete before hand in.
-
-> runComputation            :: ST Code -> (Code,Int)
-> runComputation (ST c)     =  c 0
 
 > comp      ::  Prog -> Code
 > comp pr   =   fst $ c 0
@@ -231,3 +227,10 @@ Execution
 
 > exec	    ::	Code -> Mem
 > exec c    =   reverse $ remDupes $ execLoop (c,[],[],0)
+
+--------------------------------------------------------------------------
+
+ readCode          ::  String  ->  IO [Inst]
+ readCode  file    =   
+
+
