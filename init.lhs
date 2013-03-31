@@ -9,6 +9,7 @@ Imports
 > import Data.List
 > import Control.Monad.Writer 
 > import Control.Monad.State
+> import Control.Monad.Trans
 
 Imperative language
 -------------------
@@ -112,42 +113,63 @@ Determine whether an expr can be computed entirely at compile-time, exploiting t
 >                           where
 >                               getVal (Val x) = x
 
-> compProg     ::  Prog -> State Label Code
+
+> compProg     ::  Prog -> WriterT Code (State Label) Code
 > compProg pr  =   
 >   case pr of
 >       Assign n e  ->  do
->                           return $ (compExpr e) ++ [POP n]
+>                           tell (compExpr e)
+>                           return [POP n]
 >       If e a b    ->  compIf e a b
 >       While e pr  ->  compWhile e pr
 >       Seqn prs    ->  compSeqn prs
 
-> compIf       :: Expr -> Prog -> Prog -> State Label Code
+> compIf       ::  Expr -> Prog -> Prog -> WriterT Code (State Label) Code
 > compIf e a b =   do
->                       l  <- get
->                       modify (+1)
->                       l' <- get
+>                       l   <-  lift $ get
+>                       lift $ modify (+1)
+>                       l'  <-  lift $ get
 >                       true <- compProg a
 >                       false <- compProg b
->                       return ((compExpr e) ++ [JUMPZ l] ++ true ++ [JUMP l', LABEL l] ++ false ++ [LABEL l'])
+>                       tell (compExpr e)
+>                       tell [JUMPZ l]
+>                       tell true
+>                       tell [JUMP l', LABEL l]
+>                       tell false
+>                       return [LABEL l']
 
-> compWhile        ::  Expr -> Prog -> State Label Code
-> compWhile e pr   = do
->                       l   <- get
->                       modify (+1)
->                       l'  <- get
->                       pr' <- compProg pr
->                       return ([LABEL l] ++ (compExpr e) ++ [JUMPZ l'] ++ pr' ++ [JUMP l, LABEL l'])
+ compWhile        ::  Expr -> Prog -> State Label Code
+ compWhile e pr   = do
+                       l   <- get
+                       modify (+1)
+                       l'  <- get
+                       pr' <- compProg pr
+                       return ([LABEL l] ++ (compExpr e) ++ [JUMPZ l'] ++ pr' ++ [JUMP l, LABEL l'])
 
-> compSeqn          ::  [Prog] -> State Label Code
+> compWhile         ::  Expr -> Prog -> WriterT Code (State Label) Code
+> compWhile e pr    =   do
+>                       l   <-  lift $ get
+>                       lift $ modify (+1)
+>                       l'  <-  lift $ get
+>                       pr' <-  compProg pr
+>                       tell [LABEL l]
+>                       tell (compExpr e)
+>                       tell [JUMPZ l']
+>                       tell pr'
+>                       return [JUMP l, LABEL l']
+
+> compSeqn          ::  [Prog] -> WriterT Code (State Label) Code
 > compSeqn [pr]     =   compProg pr
 > compSeqn (pr:prs) = do
 >                        compFirst <- compProg pr
 >                        compRest  <- compSeqn prs
->                        return (compFirst ++ compRest)
+>                        tell compFirst
+>                        return compRest
 
+It's all wrong... ;_;
         
 > comp      ::  Prog -> Code
-> comp pr   =   fst $ (runState $ compProg pr) 0
+> comp pr   =   snd $ fst $ runState (runWriterT $ compProg pr) 0
 
 
 
