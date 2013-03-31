@@ -7,7 +7,8 @@ Imports
 -------
 
 > import Data.List
-
+> import Control.Monad.Writer 
+> import Control.Monad.State
 
 Imperative language
 -------------------
@@ -103,7 +104,7 @@ Determine whether an expr can be computed entirely at compile-time, exploiting t
 > isReductible (Var _)      =   False
 > isReductible (App _ x y)  =   (isReductible) x && (isReductible y)
 > isReductible (Val x)      =   True
-
+>
 > reduce                ::  Expr -> Expr
 > reduce (Val x)        =   Val x
 > reduce (Var c)        =   error "something went horribly wrong while reducing an expr tree!"
@@ -111,56 +112,42 @@ Determine whether an expr can be computed entirely at compile-time, exploiting t
 >                           where
 >                               getVal (Val x) = x
 
-> type State    =   Label
-> data ST a     =   ST (Label -> (a, Label))
-> instance Monad ST where
->   return x         =   ST $ \s -> (x,s)
->   (ST st) >>= f    =   ST $ \s -> let (x,s')  = st s
->                                       (ST q)  = f x 
->                                   in q s'
+> compProg     ::  Prog -> State Label Code
+> compProg pr  =   
+>   case pr of
+>       Assign n e  ->  do
+>                           return $ (compExpr e) ++ [POP n]
+>       If e a b    ->  compIf e a b
+>       While e pr  ->  compWhile e pr
+>       Seqn prs    ->  compSeqn prs
 
-> newLabel             ::  ST Label
-> newLabel             =   ST (\n -> (n, n+1))
+> compIf       :: Expr -> Prog -> Prog -> State Label Code
+> compIf e a b =   do
+>                       l  <- get
+>                       modify (+1)
+>                       l' <- get
+>                       true <- compProg a
+>                       false <- compProg b
+>                       return ((compExpr e) ++ [JUMPZ l] ++ true ++ [JUMP l', LABEL l] ++ false ++ [LABEL l'])
 
-> compIf'       :: Expr -> Prog -> Prog -> ST Code
-> compIf' e t f = do
->                   l       <- newLabel
->                   l'      <- newLabel
->                   true    <- compProg' t
->                   false   <- compProg' f
->                   return ((compExpr e) ++ [JUMPZ l] ++ true ++ [JUMP l', LABEL l] ++ false ++ [LABEL l'])
-
-> compWhile'        ::  Expr -> Prog -> ST Code
-> compWhile' e pr   = do
->                       l   <- newLabel
->                       l'  <- newLabel
->                       pr' <- compProg' pr
+> compWhile        ::  Expr -> Prog -> State Label Code
+> compWhile e pr   = do
+>                       l   <- get
+>                       modify (+1)
+>                       l'  <- get
+>                       pr' <- compProg pr
 >                       return ([LABEL l] ++ (compExpr e) ++ [JUMPZ l'] ++ pr' ++ [JUMP l, LABEL l'])
 
-> compSeqn'          ::  [Prog] -> ST Code
-> compSeqn' [pr]     =   compProg' pr
-> compSeqn' (pr:prs) = do
->                        compFirst <- compProg' pr
->                        compRest  <- compSeqn' prs
+> compSeqn          ::  [Prog] -> State Label Code
+> compSeqn [pr]     =   compProg pr
+> compSeqn (pr:prs) = do
+>                        compFirst <- compProg pr
+>                        compRest  <- compSeqn prs
 >                        return (compFirst ++ compRest)
 
-> compProg'         ::  Prog -> ST Code
-> compProg' pr      =
->   case pr of
->       Assign n e      -> do
->                           return $ (compExpr e) ++ [POP n] 
->
->       If e t f        -> compIf' e t f
->
->       While e pr      -> compWhile' e pr
->
->       Seqn prs        -> compSeqn' prs
         
-
 > comp      ::  Prog -> Code
-> comp pr   =   fst $ c 0
->                   where
->                       (ST c) = compProg' pr
+> comp pr   =   fst $ (runState $ compProg pr) 0
 
 
 
@@ -170,8 +157,11 @@ not monadic (but it probably shouldn't be anyway)
 > type Counter = Int
 > type Machine = (Code, Stack, Mem, Counter)
 
-> loadVar            ::  Name -> Mem -> Int
-> loadVar var (m:ms) =   if (fst m) == var then (snd m) else loadVar var ms
+> loadVar          ::  Name -> Mem -> Int
+> loadVar var mem  =   isLegit $ lookup var mem
+>                           where
+>                               isLegit (Just x)    = x
+>                               isLegit Nothing     = error "var not found in memory!"
 
 > storeVar          ::  Name -> Int -> Mem -> Mem
 > storeVar v n m    =   (v,n):m
@@ -187,7 +177,7 @@ not monadic (but it probably shouldn't be anyway)
 > findLabel         ::  Label -> Code -> Counter
 > findLabel l c     =   case (findIndex pred c) of
 >                           Just x      ->   x
->                           Nothing     ->   error "Something has gone badly wrong!"
+>                           Nothing     ->   error "something has gone badly wrong!"
 >                       where
 >                           pred (LABEL l') = l' == l
 >                           pred _          = False
@@ -203,15 +193,15 @@ not monadic (but it probably shouldn't be anyway)
 
 
 
-> execStep                      ::  Machine -> Machine
-> execStep m@(c, st, mem, pc)   =    case (c !! pc) of
->                                       PUSH    n   ->  (c, (n:st), mem, (pc+1))
->                                       PUSHV   v   ->  (c, ((loadVar v mem):st), mem, (pc+1))
->                                       POP     v   ->  (c, (tail st), (storeVar v (head st) mem), (pc+1))
->                                       DO      op  ->  (c, (doOp op st), mem, (pc+1))
->                                       LABEL   l   ->  (c, st, mem, (pc+1))
->                                       JUMP    l   ->  (c, st, mem, (findLabel l c))
->                                       JUMPZ   l   ->  (c, (tail st), mem, (if (head st) == 0 then (findLabel l c) else (pc+1)))
+> execStep                  ::  Machine -> Machine
+> execStep (c, st, mem, pc) =    case (c !! pc) of
+>                                   PUSH    n   ->  (c, (n:st), mem, (pc+1))
+>                                   PUSHV   v   ->  (c, ((loadVar v mem):st), mem, (pc+1))
+>                                   POP     v   ->  (c, (tail st), (storeVar v (head st) mem), (pc+1))
+>                                   DO      op  ->  (c, (doOp op st), mem, (pc+1))
+>                                   LABEL   l   ->  (c, st, mem, (pc+1))
+>                                   JUMP    l   ->  (c, st, mem, (findLabel l c))
+>                                   JUMPZ   l   ->  (c, (tail st), mem, (if (head st) == 0 then (findLabel l c) else (pc+1)))
 
 > debugger      ::  Machine -> IO()
 > debugger m    =   do
