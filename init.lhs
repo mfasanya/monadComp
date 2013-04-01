@@ -160,8 +160,6 @@ Determine whether an expr can be computed entirely at compile-time, exploiting t
 >                       compRest  <- compSeqn prs
 >                       return ()
 
-It's all wrong... ;_;
-        
 > comp      ::  Prog -> Code
 > comp pr   =   snd $ fst $ runState (runWriterT $ compProg pr) 0
 
