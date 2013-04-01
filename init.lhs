@@ -121,55 +121,44 @@ Determine whether an expr can be computed entirely at compile-time, exploiting t
 >                           tell (compExpr e)
 >                           tell [POP v]
 >                           return ()
+>       If e a b    ->  do compIf e a b
+>       While e pr  ->  do compWhile e pr
+>       Seqn prs    ->  do compSeqn prs
 
-        If e a b    ->  do tell (compIf e a b)
-       While e pr  ->  do tell (compWhile e pr)
-       Seqn prs    ->  do tell (compSeqn prs)
+> compIf       ::  Expr -> Prog -> Prog -> WriterT Code (State Label) ()
+> compIf e a b =   do
+>                       l   <-  get
+>                       modify (+1)
+>                       l'  <-  get
+>                       modify (+1)
+>                       tell (compExpr e)
+>                       tell [JUMPZ l]
+>                       true <- compProg a
+>                       tell [JUMP l', LABEL l]
+>                       false <- compProg b
+>                       tell [LABEL l']
+>                       return ()
 
- compIf       ::  Expr -> Prog -> Prog -> WriterT Code (State Label) ()
- compIf e a b =   do
-                       l   <-  get
-                       modify (+1)
-                       l'  <-  get
-                       true <- compProg a
-                       false <- compProg b
-                       tell (compExpr e)
-                       tell [JUMPZ l]
-                       tell true
-                       tell [JUMP l', LABEL l]
-                       tell false
-                       tell [LABEL l']
-                       return ()
 
- compWhile        ::  Expr -> Prog -> State Label ()
- compWhile e pr   = do
-                       l   <- get
-                       modify (+1)
-                       l'  <- get
-                       pr' <- compProg pr
-                       return ([LABEL l] ++ (compExpr e) ++ [JUMPZ l'] ++ pr' ++ [JUMP l, LABEL l'])
+> compWhile         ::  Expr -> Prog -> WriterT Code (State Label) ()
+> compWhile e pr    =   do
+>                       l   <-  get
+>                       modify (+1)
+>                       l'  <-  get
+>                       modify (+1)
+>                       tell [LABEL l]
+>                       tell (compExpr e)
+>                       tell [JUMPZ l']
+>                       pr'  <-  compProg pr
+>                       tell [JUMP l, LABEL l']
+>                       return ()
 
- compWhile         ::  Expr -> Prog -> WriterT Code (State Label) ()
- compWhile e pr    =   do
-                       l   <-  get
-                       modify (+1)
-                       l'  <-  get
-                       pr' <-  compProg pr
-                       tell [LABEL l]
-                       tell (compExpr e)
-                       tell [JUMPZ l']
-                       tell pr'
-                       tell [JUMP l, LABEL l']
-                       return ()
-
- compSeqn          ::  [Prog] -> WriterT Code (State Label) ()
- compSeqn [pr]     =   compProg pr
- compSeqn (pr:prs) = do
-                        compFirst <- compProg pr
-                        compRest  <- compSeqn prs
-                        tell compFirst
-                        tell compRest
-                        return ()
+> compSeqn          ::  [Prog] -> WriterT Code (State Label) ()
+> compSeqn [pr]     =   compProg pr
+> compSeqn (pr:prs) = do
+>                       compFirst <- compProg pr
+>                       compRest  <- compSeqn prs
+>                       return ()
 
 It's all wrong... ;_;
         
