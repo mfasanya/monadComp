@@ -168,6 +168,9 @@ Determine whether an expr can be computed entirely at compile-time, exploiting t
 -----------------------------------------------------------------------
 not monadic (but it probably shouldn't be anyway)
 
+define a data type to name each layer of the state monadic stack, avoid lifting everywhere.  rewrite
+interpreter to use state monad transformers.
+
 > type Counter = Int
 > type Machine = (Code, Stack, Mem, Counter)
 
