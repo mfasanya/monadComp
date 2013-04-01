@@ -114,31 +114,34 @@ Determine whether an expr can be computed entirely at compile-time, exploiting t
 >                               getVal (Val x) = x
 
 
-> compProg     ::  Prog -> WriterT Code (State Label) Code
+> compProg     ::  Prog -> WriterT Code (State Label) ()
 > compProg pr  =   
 >   case pr of
->       Assign n e  ->  do
+>       Assign v e  ->  do
 >                           tell (compExpr e)
->                           return [POP n]
->       If e a b    ->  compIf e a b
->       While e pr  ->  compWhile e pr
->       Seqn prs    ->  compSeqn prs
+>                           tell [POP v]
+>                           return ()
 
-> compIf       ::  Expr -> Prog -> Prog -> WriterT Code (State Label) Code
-> compIf e a b =   do
->                       l   <-  lift $ get
->                       lift $ modify (+1)
->                       l'  <-  lift $ get
->                       true <- compProg a
->                       false <- compProg b
->                       tell (compExpr e)
->                       tell [JUMPZ l]
->                       tell true
->                       tell [JUMP l', LABEL l]
->                       tell false
->                       return [LABEL l']
+        If e a b    ->  do tell (compIf e a b)
+       While e pr  ->  do tell (compWhile e pr)
+       Seqn prs    ->  do tell (compSeqn prs)
 
- compWhile        ::  Expr -> Prog -> State Label Code
+ compIf       ::  Expr -> Prog -> Prog -> WriterT Code (State Label) ()
+ compIf e a b =   do
+                       l   <-  get
+                       modify (+1)
+                       l'  <-  get
+                       true <- compProg a
+                       false <- compProg b
+                       tell (compExpr e)
+                       tell [JUMPZ l]
+                       tell true
+                       tell [JUMP l', LABEL l]
+                       tell false
+                       tell [LABEL l']
+                       return ()
+
+ compWhile        ::  Expr -> Prog -> State Label ()
  compWhile e pr   = do
                        l   <- get
                        modify (+1)
@@ -146,25 +149,27 @@ Determine whether an expr can be computed entirely at compile-time, exploiting t
                        pr' <- compProg pr
                        return ([LABEL l] ++ (compExpr e) ++ [JUMPZ l'] ++ pr' ++ [JUMP l, LABEL l'])
 
-> compWhile         ::  Expr -> Prog -> WriterT Code (State Label) Code
-> compWhile e pr    =   do
->                       l   <-  lift $ get
->                       lift $ modify (+1)
->                       l'  <-  lift $ get
->                       pr' <-  compProg pr
->                       tell [LABEL l]
->                       tell (compExpr e)
->                       tell [JUMPZ l']
->                       tell pr'
->                       return [JUMP l, LABEL l']
+ compWhile         ::  Expr -> Prog -> WriterT Code (State Label) ()
+ compWhile e pr    =   do
+                       l   <-  get
+                       modify (+1)
+                       l'  <-  get
+                       pr' <-  compProg pr
+                       tell [LABEL l]
+                       tell (compExpr e)
+                       tell [JUMPZ l']
+                       tell pr'
+                       tell [JUMP l, LABEL l']
+                       return ()
 
-> compSeqn          ::  [Prog] -> WriterT Code (State Label) Code
-> compSeqn [pr]     =   compProg pr
-> compSeqn (pr:prs) = do
->                        compFirst <- compProg pr
->                        compRest  <- compSeqn prs
->                        tell compFirst
->                        return compRest
+ compSeqn          ::  [Prog] -> WriterT Code (State Label) ()
+ compSeqn [pr]     =   compProg pr
+ compSeqn (pr:prs) = do
+                        compFirst <- compProg pr
+                        compRest  <- compSeqn prs
+                        tell compFirst
+                        tell compRest
+                        return ()
 
 It's all wrong... ;_;
         
