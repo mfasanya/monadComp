@@ -274,9 +274,6 @@ Writing as if it's imperative huehuehuehuehue
 >                                           incPC
 >                                       modifyStack tail
 >                                       return ()
->                                       
->                       
->                                      
 
 > execLoop'         ::      Machine'
 > execLoop'         =   do
