@@ -10,6 +10,7 @@ Imports
 > import Control.Monad.Writer 
 > import Control.Monad.State
 > import Control.Monad.Trans
+> import Control.Monad.Reader
 
 Imperative language
 -------------------
@@ -220,6 +221,82 @@ interpreter to use state monad transformers.
 >                                   JUMP    l   ->  (c, st, mem, (findLabel l c))
 >                                   JUMPZ   l   ->  (c, (tail st), mem, (if (head st) == 0 then (findLabel l c) else (pc+1)))
 
+> type Machine' = StateT Counter (StateT Mem (StateT Stack (Reader Code))) ()
+
+> liftToMem     =   lift
+> liftToStack   =   lift . lift
+
+> getMem        =   liftToMem $ get
+> getStack      =   liftToStack $ get
+
+> modifyMem fn     =   liftToMem $ modify fn
+> modifyStack fn   =   liftToStack $ modify fn
+
+> incPC    =   modify (+1)
+
+Writing as if it's imperative huehuehuehuehue
+
+> execStep'     ::      Machine'
+> execStep'     = do
+>                   pc <- get
+>                   c <- ask
+>                   case (c !! pc) of
+>                       PUSH n  ->  do
+>                                       modifyStack (n:)
+>                                       incPC
+>                                       return ()
+>                       PUSHV v ->  do
+>                                       mem <- getMem
+>                                       modifyStack ((loadVar v mem):)
+>                                       incPC
+>                                       return ()
+>                       POP v   ->  do
+>                                       st <- getStack
+>                                       modifyMem (storeVar v (head st))
+>                                       modifyStack tail
+>                                       incPC
+>                                       return ()
+>                       DO op   ->  do
+>                                       modifyStack (doOp op)
+>                                       incPC
+>                                       return ()
+>                       LABEL l ->  do
+>                                       incPC
+>                                       return ()
+>                       JUMP l  ->  do
+>                                       put (findLabel l c)
+>                                       return ()
+>                       JUMPZ l ->  do
+>                                       st <- getStack
+>                                       if (head st) == 0 then
+>                                           put (findLabel l c)
+>                                       else
+>                                           incPC
+>                                       modifyStack tail
+>                                       return ()
+>                                       
+>                       
+>                                      
+
+> execLoop'         ::      Machine'
+> execLoop'         =   do
+>                           pc <- get
+>                           c  <- ask
+>                           if pc >= (length c) then
+>                               return ()
+>                           else
+>                               do
+>                                   execStep'
+>                                   execLoop'
+>                               
+
+> debug              ::  Code -> Stack -> Mem -> (Counter, Mem, Stack)
+> debug c s m     =   (pc, mem, st)
+>                       where
+>                           (r, st) = runReader (runStateT (runStateT (runStateT execStep' 0) m) s) c
+>                           (r', mem) = r
+>                           (r'', pc) = r'
+
 > debugger      ::  Machine -> IO()
 > debugger m    =   do
 >                       putStrLn (show m)
@@ -234,6 +311,11 @@ Execution
 
 > exec	    ::	Code -> Mem
 > exec c    =   reverse $ remDupes $ execLoop (c,[],[],0)
+
+> exec'     ::  Code -> Mem
+> exec' c   =  reverse $ remDupes $ mem
+>                where
+>                    (((_,_),mem),_) = runReader (runStateT (runStateT (runStateT execLoop' 0) []) []) c
 
 --------------------------------------------------------------------------
 
