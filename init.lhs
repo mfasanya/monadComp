@@ -34,9 +34,10 @@ Imperative language
 Virtual machine
 ---------------
 
-> type Stack            =  [Int]
->
+
 > type Mem              =  [(Name,Int)]
+>
+> type Stack            =  [Int]
 >
 > type Code             =  [Inst]
 >
@@ -65,14 +66,27 @@ Factorial example
 -----------------------------------------------------------------------
 Compilation
 
+PROTIP: All expr optimisations can be put in one function and controlled from there and this can made way way cleaner.
+
+Need an Expr -> Expr to perform algebraic simplification beforehand. compExpr needs tearing apart.
+
 > compExpr      :: Expr -> Code
 > compExpr e =
 >   case e of
 >       Val i                   ->  [PUSH i]
 >       Var x                   ->  [PUSHV x]
 >       App op (Val a) (Val b)  ->  [PUSH (exprOpt op a b)]
+>       App Mul (Val 0) _       ->  compExpr (Val 0)
+>       App Mul _ (Val 0)       ->  compExpr (Val 0)
+>       App Mul x (Val 1)       ->  compExpr x
+>       App Mul (Val 1) x       ->  compExpr x
+>       App Add x (Val 0)       ->  compExpr x
+>       App Add (Val 0) x       ->  compExpr x
+>       App Sub x (Val 0)       ->  compExpr x
+>       App Div x (Val 1)       ->  compExpr x
+>       App Div x (Val 0)       ->  error "nope"
+>       App Div (Val 0) _       ->  compExpr (Val 0)
 >       App op a b              ->  (if (isReductible e) then (compExpr $ reduce e) else (compExpr a) ++ (compExpr b)) ++ [DO op]
->
 
 
 Optimise out arithmetic operations where both arguments are known at compile-time (constant folding)
@@ -109,10 +123,10 @@ Determine whether an expr can be computed entirely at compile-time, exploiting t
 >
 > reduce                ::  Expr -> Expr
 > reduce (Val x)        =   Val x
-> reduce (Var c)        =   error "something went horribly wrong while reducing an expr tree!"
+> reduce (Var _)        =   error "error"
 > reduce (App op x y)   =   Val (arithOpt op (getVal $ (reduce x)) (getVal $ (reduce y)))
 >                           where
->                               getVal (Val x) = x
+>                               getVal (Val x)  =   x
 
 
 > compProg     ::  Prog -> WriterT Code (State Label) ()
@@ -172,6 +186,7 @@ not monadic (but it probably shouldn't be anyway)
 TODO:
 
     - When optimising, we need to be able to compare to expr trees to determine if they are equivalent. e.g. (4 + a) + c = 4 + (a + c)
+        Would need to have the compiler recognise associativity of addition and mul but not div and sub. (will be too hard).
 
 > type Counter = Int
 > type Machine = (Code, Stack, Mem, Counter)
