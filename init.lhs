@@ -67,25 +67,12 @@ Factorial example
 Compilation
 
 
-Need an Expr -> Expr to perform algebraic simplification beforehand. compExpr needs tearing apart.
-
 > compExpr      :: Expr -> Code
 > compExpr e =
->   case e of
+>   case (optExpr True e) of
 >       Val i                   ->  [PUSH i]
 >       Var x                   ->  [PUSHV x]
->       App op (Val a) (Val b)  ->  [PUSH (exprOpt op a b)]
->       App Mul (Val 0) _       ->  compExpr (Val 0)
->       App Mul _ (Val 0)       ->  compExpr (Val 0)
->       App Mul x (Val 1)       ->  compExpr x
->       App Mul (Val 1) x       ->  compExpr x
->       App Add x (Val 0)       ->  compExpr x
->       App Add (Val 0) x       ->  compExpr x
->       App Sub x (Val 0)       ->  compExpr x
->       App Div x (Val 1)       ->  compExpr x
->       App Div x (Val 0)       ->  error "nope"
->       App Div (Val 0) _       ->  compExpr (Val 0)
->       App op a b              ->  (if (isReductible e) then (compExpr $ reduce e) else (compExpr a) ++ (compExpr b)) ++ [DO op]
+>       App op a b              ->  (compExpr a) ++ (compExpr b) ++ [DO op]
 
 Problem: needs one more step at the end to simplify again.  Returns exprs like (App Mul (Val 0) (Var 'x')). Difficult.
 Solved:  absolutely disgusting
@@ -97,10 +84,12 @@ Problem: can improve simplification to allow this 2x - x = x
 >   case e of
 >       Val _       ->  e
 >       Var _       ->  e
->       App Add x y ->  if continue then optExpr (not continue) $ addOpt x y else addOpt x y
->       App Sub x y ->  if continue then optExpr (not continue) $ subOpt x y else subOpt x y
->       App Mul x y ->  if continue then optExpr (not continue) $ mulOpt x y else mulOpt x y
->       App Div x y ->  if continue then optExpr (not continue) $ divOpt x y else divOpt x y
+>       App Add x y ->  stopOrNot $ addOpt x y
+>       App Sub x y ->  stopOrNot $ subOpt x y
+>       App Mul x y ->  stopOrNot $ mulOpt x y
+>       App Div x y ->  stopOrNot $ divOpt x y
+>   where
+>       stopOrNot = if continue then optExpr (not continue) else id
 
 > addOpt                    ::  Expr -> Expr -> Expr
 > addOpt (Val 0) x          =   optExpr False x
@@ -128,46 +117,6 @@ Problem: can improve simplification to allow this 2x - x = x
 > divOpt x y                =   if (x == y) then Val 1 else App Div (optExpr False x) (optExpr False y)
 
 
-Optimise out arithmetic operations where both arguments are known at compile-time (constant folding)
-
-> exprOpt           ::  Op -> Int -> Int -> Int
-> exprOpt op x y   
->                   |   x == y  = commonOpt op x
->                   |   otherwise = arithOpt op x y
-
-> arithOpt          ::  Op -> Int -> Int -> Int
-> arithOpt op x y   =
->   case op of
->       Add     ->      x + y
->       Sub     ->      x - y
->       Mul     ->      x * y
->       Div     ->      x `div` y
-
-...and optimise for instances where the operands are equal.
-
-> commonOpt         ::  Op -> Int -> Int
-> commonOpt op  x   =
->   case op of
->       Add         ->  2*x
->       Sub         ->  0
->       Mul         ->  x^2
->       Div         ->  1
-
-Determine whether an expr can be computed entirely at compile-time, exploiting the fact that such an expr-tree has only 'Val's at the leaves
-
-> isReductible              ::  Expr    ->  Bool
-> isReductible (Var _)      =   False
-> isReductible (App _ x y)  =   (isReductible) x && (isReductible y)
-> isReductible (Val x)      =   True
->
-> reduce                ::  Expr -> Expr
-> reduce (Val x)        =   Val x
-> reduce (Var _)        =   error "error"
-> reduce (App op x y)   =   Val (arithOpt op (getVal $ (reduce x)) (getVal $ (reduce y)))
->                           where
->                               getVal (Val x)  =   x
-
-
 > compProg     ::  Prog -> WriterT Code (State Label) ()
 > compProg pr  =   
 >   case pr of
@@ -175,9 +124,9 @@ Determine whether an expr can be computed entirely at compile-time, exploiting t
 >                           tell (compExpr e)
 >                           tell [POP v]
 >                           return ()
->       If e a b    ->  do compIf e a b
->       While e pr  ->  do compWhile e pr
->       Seqn prs    ->  do compSeqn prs
+>       If e a b    ->  compIf e a b
+>       While e pr  ->  compWhile e pr
+>       Seqn prs    ->  compSeqn prs
 
 > compIf       ::  Expr -> Prog -> Prog -> WriterT Code (State Label) ()
 > compIf e a b =   do
@@ -196,16 +145,16 @@ Determine whether an expr can be computed entirely at compile-time, exploiting t
 
 > compWhile         ::  Expr -> Prog -> WriterT Code (State Label) ()
 > compWhile e pr    =   do
->                       l   <-  get
->                       modify (+1)
->                       l'  <-  get
->                       modify (+1)
->                       tell [LABEL l]
->                       tell (compExpr e)
->                       tell [JUMPZ l']
->                       pr'  <-  compProg pr
->                       tell [JUMP l, LABEL l']
->                       return ()
+>                           l   <-  get
+>                           modify (+1)
+>                           l'  <-  get
+>                           modify (+1)
+>                           tell [LABEL l]
+>                           tell (compExpr e)
+>                           tell [JUMPZ l']
+>                           pr'  <-  compProg pr
+>                           tell [JUMP l, LABEL l']
+>                           return ()
 
 > compSeqn          ::  [Prog] -> WriterT Code (State Label) ()
 > compSeqn [pr]     =   compProg pr
@@ -224,8 +173,6 @@ not monadic (but it probably shouldn't be anyway)
 
 TODO:
 
-    - When optimising, we need to be able to compare to expr trees to determine if they are equivalent. e.g. (4 + a) + c = 4 + (a + c)
-        Would need to have the compiler recognise associativity of addition and mul but not div and sub. (will be too hard).
 
 > type Counter = Int
 > type Machine = (Code, Stack, Mem, Counter)
