@@ -66,7 +66,6 @@ Factorial example
 -----------------------------------------------------------------------
 Compilation
 
-PROTIP: All expr optimisations can be put in one function and controlled from there and this can made way way cleaner.
 
 Need an Expr -> Expr to perform algebraic simplification beforehand. compExpr needs tearing apart.
 
@@ -87,6 +86,46 @@ Need an Expr -> Expr to perform algebraic simplification beforehand. compExpr ne
 >       App Div x (Val 0)       ->  error "nope"
 >       App Div (Val 0) _       ->  compExpr (Val 0)
 >       App op a b              ->  (if (isReductible e) then (compExpr $ reduce e) else (compExpr a) ++ (compExpr b)) ++ [DO op]
+
+Problem: needs one more step at the end to simplify again.  Returns exprs like (App Mul (Val 0) (Var 'x')). Difficult.
+Solved:  absolutely disgusting
+
+Problem: can improve simplification to allow this 2x - x = x
+
+> optExpr       ::  Bool -> Expr -> Expr
+> optExpr continue e =
+>   case e of
+>       Val _       ->  e
+>       Var _       ->  e
+>       App Add x y ->  if continue then optExpr (not continue) $ addOpt x y else addOpt x y
+>       App Sub x y ->  if continue then optExpr (not continue) $ subOpt x y else subOpt x y
+>       App Mul x y ->  if continue then optExpr (not continue) $ mulOpt x y else mulOpt x y
+>       App Div x y ->  if continue then optExpr (not continue) $ divOpt x y else divOpt x y
+
+> addOpt                    ::  Expr -> Expr -> Expr
+> addOpt (Val 0) x          =   optExpr False x
+> addOpt x (Val 0)          =   optExpr False x
+> addOpt (Val x) (Val y)    =   Val (x + y)
+> addOpt x y                =   if (x == y) then App Mul (Val 2) (optExpr False x) else App Add (optExpr False x) (optExpr False y)
+
+> subOpt                    ::  Expr -> Expr -> Expr
+> subOpt x (Val 0)          =   optExpr False x
+> subOpt (Val x) (Val y)    =   Val (x - y)
+> subOpt x y                =   if (x == y) then Val 0 else App Sub (optExpr False x) (optExpr False y)
+
+> mulOpt                    ::  Expr -> Expr -> Expr
+> mulOpt _ (Val 0)          =   Val 0
+> mulOpt (Val 0) _          =   Val 0
+> mulOpt x (Val 1)          =   optExpr False x
+> mulOpt (Val 1) x          =   optExpr False x
+> mulOpt (Val x) (Val y)    =   if (x == y) then Val (x^2) else Val (x * y)
+> mulOpt x y                =   App Mul (optExpr False x) (optExpr False y)
+
+> divOpt                    ::  Expr -> Expr -> Expr
+> divOpt x (Val 1)          =   optExpr False x
+> divOpt (Val 0) x          =   Val 0
+> divOpt (Val x) (Val y)    =   Val (x `div` y)
+> divOpt x y                =   if (x == y) then Val 1 else App Div (optExpr False x) (optExpr False y)
 
 
 Optimise out arithmetic operations where both arguments are known at compile-time (constant folding)
