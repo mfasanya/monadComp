@@ -223,7 +223,7 @@ get the initial state.
 > type Counter = Int
 > type Machine = (Code, Stack, Mem, Counter)
 
-Function used to search for value counterpart to a given name within memory. Uses isLegit
+Function used to search for value counterpart to a given name within memory. Uses isLegit 
 to unwrap the Maybe monad.
 
 > loadVar          ::  Name -> Mem -> Int
@@ -309,26 +309,5 @@ code in memory.
 
 > exec	    ::	Code -> Mem
 > exec c    =   reverse $ remDupes $ execLoop (c,[],[],0)
-
---------------------------------------------------------------------------
-
-Debugging functions.
-
-> debug              ::  Code -> Stack -> Mem -> (Counter, Mem, Stack)
-> debug c s m     =   (pc, mem, st)
->                       where
->                           (r, st) = runReader (runStateT (runStateT (runStateT execStep' 0) m) s) c
->                           (r', mem) = r
->                           (r'', pc) = r'
-
-> debugger      ::  Machine -> IO()
-> debugger m    =   do
->                       putStrLn (show m)
->                       option <- getChar
->                       if (option == 'x') then return ()
->                           else
->                               do
->                                   let next = execStep m
->   
 
 --------------------------------------------------------------------------
